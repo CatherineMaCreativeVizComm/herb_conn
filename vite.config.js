@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  // Set up a local development server proxy
   server: {
     proxy: {
       '/api/multimedia': {
@@ -11,14 +10,14 @@ export default defineConfig({
       }
     }
   },
-  optimizeDeps: {
-  },
   build: {
     lib: {
-      entry: 'src/main.js',
-      name: 'HerbConnWidget',
-      fileName: (format) => `herb-conn.${format}.js`,
-      formats: ['umd'] 
+      entry: {
+        'herb-conn': 'src/herbconn.js',
+        // 'second-widget': 'src/second-widget.js'
+      },
+      formats: ['es'], 
+      fileName: (format, entryName) => `${entryName}.${format}.js`
     }
   }
 });

@@ -1,4 +1,3 @@
-
 const seasonMap = {
   "立春": "Beginning of Spring", "雨水": "Rain Water", "惊蛰": "Waking of Insects",
   "春分": "Spring Equinox", "清明": "Pure Brightness", "谷雨": "Grain Rain",
@@ -25,29 +24,30 @@ export async function fetchAndProcessData(url) {
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     
     const csvText = await response.text();
-    
-    let parsedData = parseCSV(csvText);
-    parsedData = translateData(parsedData);
-    const nestedJSON = nestDataByTea(parsedData);
+    const { dataA, dataB, dataC } = parseAndSplitCSV(csvText);
+    const translatedDataA = translateData(dataA);
+    const nestedJSON = mergeDatasets(translatedDataA, dataB, dataC);
     
     return nestedJSON;
   } catch (error) {
     console.error("Error loading or processing the CSV file:", error);
-    return null;
+    return null; 
   }
 }
 
-function parseCSV(text) {
+function parseAndSplitCSV(text) {
   const rows = text.trim().split("\n");
-  if (rows.length === 0) return [];
+  const dataA = [], dataB = [], dataC = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row) continue;
 
-  const parsedRows = rows.map(row => {
     const columns = [];
     let currentColumn = '';
     let inQuotes = false;
 
-    for (let i = 0; i < row.length; i++) {
-      const char = row[i];
+    for (let j = 0; j < row.length; j++) {
+      const char = row[j];
       if (char === '"') {
         inQuotes = !inQuotes;
       } else if (char === ',' && !inQuotes) {
@@ -58,21 +58,41 @@ function parseCSV(text) {
       }
     }
     columns.push(currentColumn.trim());
-    return columns;
-  });
 
-  const headers = parsedRows[0];
-  const dataObjects = [];
-
-  for (let i = 1; i < parsedRows.length; i++) {
-    let obj = {};
-    for (let j = 0; j < headers.length; j++) {
-      obj[headers[j]] = parsedRows[i][j];
+    if (columns[0]) {
+      dataA.push({
+        id_tea: columns[0],
+        name: columns[1],
+        tea_img: columns[2],
+        season: columns[3],
+        groups: columns[4]
+      });
     }
-    dataObjects.push(obj);
+
+    if (columns[7]) {
+      dataB.push({
+        id_tea_fml: columns[7],
+        name_fml: columns[8],
+        elm: columns[9],
+        id_herb_fml: columns[10],
+        value: columns[11]
+      });
+    }
+
+    if (columns[14]) {
+      dataC.push({
+        id_herb: columns[14],
+        englat: columns[15],
+        herb_img: columns[16],
+        nature: columns[17],
+        meridian_affinity: columns[18],
+        flavor: columns[19],
+        title_sim: columns[20]
+      });
+    }
   }
 
-  return dataObjects;
+  return { dataA, dataB, dataC };
 }
 
 function translateData(data) {
@@ -94,34 +114,38 @@ function translateData(data) {
   });
 }
 
-function nestDataByTea(data) {
+function mergeDatasets(teas, formulas, herbs) {
   const nestedData = {};
 
-  data.forEach(row => {
-    const teaid = row.id_tea;
-
-    if (!teaid) return;
-    if (!nestedData[teaid]) {
-      nestedData[teaid] = {
-        name: row.name,
-        tea_img: row.tea_img,
-        season: row.season,
-        groups: row.groups,
+  teas.forEach(tea => {
+    if (!nestedData[tea.id_tea]) {
+      nestedData[tea.id_tea] = {
+        name: tea.name,
+        tea_img: tea.tea_img,
+        season: tea.season,
+        groups: tea.groups,
         herbs: []
       };
     }
+  });
 
-    const herbInfo = {
-      id_herb: row.id_herb || row.id_gerb, 
-      herb_name: row['elm'],
-      herb_value: row['value'],
-      herb_img: row.herb_img,
-      nature: row.Nature,
-      meridian_affinity: row['Meridian Affinity'],
-      flavor: row.Flavor,
-      englat: row.englat
-    };
-    nestedData[teaid].herbs.push(herbInfo);
+  formulas.forEach(formula => {
+    const teaId = formula.id_tea_fml;
+    
+    if (nestedData[teaId]) {
+      const matchingHerb = herbs.find(h => h.id_herb === formula.id_herb_fml);
+      
+      nestedData[teaId].herbs.push({
+        id_herb: formula.id_herb_fml,
+        herb_name: formula.elm,
+        herb_value: formula.value,
+        herb_img: matchingHerb ? matchingHerb.herb_img : '',
+        nature: matchingHerb ? matchingHerb.nature : '',
+        meridian_affinity: matchingHerb ? matchingHerb.meridian_affinity : '',
+        flavor: matchingHerb ? matchingHerb.flavor : '',
+        englat: matchingHerb ? matchingHerb.englat : ''
+      });
+    }
   });
 
   return nestedData;
